@@ -81,6 +81,7 @@ data "aws_iam_policy_document" "task" {
     resources = [
       var.dynamodb_sessions_arn,
       var.dynamodb_votes_arn,
+      var.dynamodb_scenarios_arn,
     ]
   }
 

@@ -30,6 +30,10 @@ variable "dynamodb_votes_arn" {
   type = string
 }
 
+variable "dynamodb_scenarios_arn" {
+  type = string
+}
+
 variable "appsync_endpoint" {
   type = string
 }

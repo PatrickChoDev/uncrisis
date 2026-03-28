@@ -87,8 +87,9 @@ module "ecs" {
   ecr_image_uri         = module.ecr.repository_url
   sqs_queue_url         = module.sqs.vote_queue_url
   sqs_queue_arn         = module.sqs.vote_queue_arn
-  dynamodb_sessions_arn = module.dynamodb.sessions_table_arn
-  dynamodb_votes_arn    = module.dynamodb.votes_table_arn
+  dynamodb_sessions_arn  = module.dynamodb.sessions_table_arn
+  dynamodb_votes_arn     = module.dynamodb.votes_table_arn
+  dynamodb_scenarios_arn = module.dynamodb.scenarios_table_arn
   appsync_endpoint      = module.appsync.graphql_url
   appsync_api_key       = module.appsync.api_key
   tags                  = local.tags
