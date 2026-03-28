@@ -1,0 +1,161 @@
+schema {
+  query:        Query
+  mutation:     Mutation
+  subscription: Subscription
+}
+
+type Query {
+  getSession(sessionId: ID!): GameSession
+}
+
+type Mutation {
+  # Called by players via the React frontend
+  submitVote(input: VoteInput!): VoteRecord
+  # Called exclusively by the ECS game server
+  updateGameState(input: GameStateInput!): GameState
+  # Called by the game server when a new session is created
+  createSession(input: CreateSessionInput!): GameSession
+}
+
+type Subscription {
+  onGameStateUpdated(sessionId: ID!): GameState
+    @aws_subscribe(mutations: ["updateGameState"])
+}
+
+# ── Types ────────────────────────────────────────────────────────────────────
+
+type GameSession {
+  sessionId:   ID!
+  hostName:    String!
+  players:     [Player!]!
+  phase:       GamePhase!
+  currentRound: Int!
+  totalRounds: Int!
+  scenario:    Scenario
+  results:     [RoundResult!]
+  peaceScore:  Float
+  createdAt:   String!
+}
+
+type Player {
+  playerId:    ID!
+  displayName: String!
+  hasVoted:    Boolean!
+}
+
+type Scenario {
+  scenarioId:  ID!
+  title:       String!
+  context:     String!
+  options:     [Option!]!
+}
+
+type Option {
+  id:    String!
+  label: String!
+}
+
+type RoundResult {
+  round:             Int!
+  tally:             [OptionTally!]!
+  winningOption:     String!
+  consensusPct:      Float!
+  peaceScore:        Float!
+  narrativeOutcome:  String!
+}
+
+type OptionTally {
+  optionId: String!
+  label:    String!
+  count:    Int!
+  pct:      Float!
+}
+
+type VoteRecord {
+  sessionId: ID!
+  playerId:  ID!
+  choice:    String!
+  round:     Int!
+  timestamp: String!
+}
+
+type GameState {
+  sessionId:    ID!
+  phase:        GamePhase!
+  currentRound: Int!
+  totalRounds:  Int!
+  scenario:     Scenario
+  players:      [Player!]!
+  timeLeftSecs: Int
+  lastResult:   RoundResult
+  peaceScore:   Float
+}
+
+enum GamePhase {
+  LOBBY
+  CRISIS
+  VOTING
+  TALLY
+  RESULT
+  FINAL
+}
+
+# ── Inputs ───────────────────────────────────────────────────────────────────
+
+input VoteInput {
+  sessionId: ID!
+  playerId:  ID!
+  choice:    String!
+  round:     Int!
+}
+
+input GameStateInput {
+  sessionId:    ID!
+  phase:        GamePhase!
+  currentRound: Int!
+  totalRounds:  Int!
+  scenario:     ScenarioInput
+  players:      [PlayerInput!]!
+  timeLeftSecs: Int
+  lastResult:   RoundResultInput
+  peaceScore:   Float
+}
+
+input ScenarioInput {
+  scenarioId: ID!
+  title:      String!
+  context:    String!
+  options:    [OptionInput!]!
+}
+
+input OptionInput {
+  id:    String!
+  label: String!
+}
+
+input PlayerInput {
+  playerId:    ID!
+  displayName: String!
+  hasVoted:    Boolean!
+}
+
+input RoundResultInput {
+  round:            Int!
+  tally:            [OptionTallyInput!]!
+  winningOption:    String!
+  consensusPct:     Float!
+  peaceScore:       Float!
+  narrativeOutcome: String!
+}
+
+input OptionTallyInput {
+  optionId: String!
+  label:    String!
+  count:    Int!
+  pct:      Float!
+}
+
+input CreateSessionInput {
+  hostName:    String!
+  totalRounds: Int!
+}
