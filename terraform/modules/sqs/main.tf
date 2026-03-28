@@ -1,7 +1,7 @@
 # Dead-letter queue for unprocessable votes
 resource "aws_sqs_queue" "vote_dlq" {
   name                      = "${var.project_name}-vote-dlq"
-  message_retention_seconds = 1209600 # 14 days
+  message_retention_seconds = 345600 # 4 days
   tags                      = var.tags
 }
 

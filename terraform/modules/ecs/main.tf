@@ -27,7 +27,7 @@ resource "aws_ecs_cluster" "this" {
 # ── CloudWatch log group ──────────────────────────────────────────────────────
 resource "aws_cloudwatch_log_group" "game_server" {
   name              = "/ecs/${var.project_name}/game-server"
-  retention_in_days = 14
+  retention_in_days = 3
   tags              = var.tags
 }
 
@@ -99,8 +99,16 @@ resource "aws_iam_role_policy" "task" {
 # ── Security group ────────────────────────────────────────────────────────────
 resource "aws_security_group" "game_server" {
   name        = "${var.project_name}-game-server-sg"
-  description = "Allow outbound-only traffic for the game server"
+  description = "Allow inbound HTTP on 8080 and all outbound for the game server"
   vpc_id      = data.aws_vpc.default.id
+
+  ingress {
+    description = "HTTP game server API"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   egress {
     from_port   = 0
@@ -117,8 +125,8 @@ resource "aws_ecs_task_definition" "game_server" {
   family                   = "${var.project_name}-game-server"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = "512"
-  memory                   = "1024"
+  cpu                      = "256"
+  memory                   = "512"
   execution_role_arn       = aws_iam_role.execution.arn
   task_role_arn            = aws_iam_role.task.arn
   tags                     = var.tags
@@ -150,7 +158,9 @@ resource "aws_ecs_task_definition" "game_server" {
         }
       }
 
-      portMappings = []
+      portMappings = [
+        { containerPort = 8080, hostPort = 8080, protocol = "tcp" }
+      ]
     }
   ])
 }
@@ -161,8 +171,20 @@ resource "aws_ecs_service" "game_server" {
   cluster         = aws_ecs_cluster.this.id
   task_definition = aws_ecs_task_definition.game_server.arn
   desired_count   = 1
-  launch_type     = "FARGATE"
   tags            = var.tags
+
+  # Prefer Fargate Spot (~70% cheaper). Falls back to regular Fargate if Spot
+  # capacity is unavailable (rare in ap-southeast-1 for a single small task).
+  capacity_provider_strategy {
+    capacity_provider = "FARGATE_SPOT"
+    weight            = 100
+    base              = 0
+  }
+  capacity_provider_strategy {
+    capacity_provider = "FARGATE"
+    weight            = 1
+    base              = 0
+  }
 
   network_configuration {
     subnets          = data.aws_subnets.default.ids
@@ -171,6 +193,6 @@ resource "aws_ecs_service" "game_server" {
   }
 
   lifecycle {
-    ignore_changes = [task_definition]
+    ignore_changes = [task_definition, desired_count]
   }
 }

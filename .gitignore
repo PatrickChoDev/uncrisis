@@ -1,6 +1,7 @@
 # Node
 frontend/node_modules/
 frontend/dist/
+frontend/.env.local
 
 # Go build artifacts
 backend/game-server

@@ -148,13 +148,7 @@ resource "aws_appsync_resolver" "update_game_state" {
   response_template = "$util.toJson($ctx.result)"
 }
 
-# Subscription.onGameStateUpdated
-resource "aws_appsync_resolver" "on_game_state_updated" {
-  api_id      = aws_appsync_graphql_api.this.id
-  type        = "Subscription"
-  field       = "onGameStateUpdated"
-  data_source = aws_appsync_datasource.none.name
-
-  request_template  = "{\"version\":\"2018-05-29\",\"payload\":{}}"
-  response_template = "$util.toJson($ctx.result)"
-}
+# No resolver needed on onGameStateUpdated — the @aws_subscribe directive in
+# the schema routes mutation results to subscribers and filters by sessionId
+# automatically. Adding a NONE resolver here causes AppSync to validate the
+# empty setup payload {} against GameState, failing on sessionId: ID!.

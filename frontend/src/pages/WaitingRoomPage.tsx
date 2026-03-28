@@ -1,14 +1,26 @@
+import { useEffect, useState } from 'react'
 import { useGameStore } from '../store'
 import { PlayerList } from '../components/PlayerList'
 import { GAME_SERVER_URL } from '../config'
-import { useState } from 'react'
 
 export function WaitingRoomPage() {
-  const { sessionId, gameState, displayName } = useGameStore()
+  const { sessionId, playerId, gameState, displayName } = useGameStore()
   const [starting, setStarting] = useState(false)
 
   const players = gameState?.players ?? []
-  const isHost = players[0]?.displayName === displayName
+  // Use playerId (not displayName) so two players with the same name don't both get host controls
+  const isHost = !!playerId && players[0]?.playerId === playerId
+
+  // Re-join on mount so the server broadcasts current state to our (now-ready) subscription.
+  // This handles the race where the initial join broadcast fired before the WebSocket was open.
+  useEffect(() => {
+    if (!sessionId || !playerId || !displayName) return
+    fetch(`${GAME_SERVER_URL}/sessions/${sessionId}/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId, displayName }),
+    }).catch(() => {/* best-effort refresh */})
+  }, [sessionId, playerId, displayName])
 
   async function handleStart() {
     if (!sessionId) return

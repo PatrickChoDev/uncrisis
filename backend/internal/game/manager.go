@@ -98,11 +98,11 @@ func (m *Manager) JoinSession(ctx context.Context, sessionID, playerID, displayN
 	}
 
 	ss.mu.Lock()
-	// Deduplicate
+	// Deduplicate — but still broadcast so late-connecting subscribers get current state
 	for _, p := range ss.session.Players {
 		if p.PlayerID == playerID {
 			ss.mu.Unlock()
-			return nil
+			return m.broadcastState(ctx, ss)
 		}
 	}
 	ss.session.Players = append(ss.session.Players, Player{

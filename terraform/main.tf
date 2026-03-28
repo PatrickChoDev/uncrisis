@@ -40,6 +40,9 @@ module "cloudfront" {
   s3_bucket_arn       = module.s3.bucket_arn
   project_name        = var.project_name
   tags                = local.tags
+  # ecs_task_ip is intentionally left as default ("placeholder.invalid") here.
+  # deploy-backend.sh updates the CloudFront origin directly via AWS CLI after
+  # each ECS deployment, and lifecycle.ignore_changes keeps tofu from resetting it.
 }
 
 # ──────────────────────────────────────────────

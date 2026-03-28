@@ -1,4 +1,4 @@
-# 🌐 UN Crisis Room
+# UN Crisis Room
 
 > Real-time multiplayer diplomacy game — powered by AWS, Go & React + Three.js
 
@@ -25,37 +25,20 @@ Group debates and collective decision-making often end in circular arguments tha
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                    AWS Cloud                          │
-│                                                      │
-│  ┌──────────┐    ┌────────────┐   ┌───────────────┐  │
-│  │CloudFront│───▶│     S3     │   │   AppSync     │  │
-│  │  (CDN)   │    │ (Frontend) │   │ (GraphQL WS)  │  │
-│  └──────────┘    └────────────┘   └───────┬───────┘  │
-│                                           │           │
-│  ┌───────────────────────────────────┐    │           │
-│  │         ECS Fargate               │    │           │
-│  │    Go Game Server                 │◀───┘           │
-│  │  ┌──────────────┐ ┌────────────┐  │               │
-│  │  │ Round Timer  │ │ SQS Poller │  │               │
-│  │  └──────────────┘ └────┬───────┘  │               │
-│  └───────────────────────────────────┘               │
-│                           │                           │
-│                    ┌──────▼──────┐                    │
-│                    │     SQS     │                    │
-│                    │ (Vote Queue)│                    │
-│                    └─────────────┘                    │
-│                                                      │
-│  ┌──────────────────────────────────────────────────┐ │
-│  │                  DynamoDB                        │ │
-│  │  sessions-table  │  votes-table  │ scenarios-table│ │
-│  └──────────────────────────────────────────────────┘ │
-│                                                      │
-│  ┌──────────┐                                        │
-│  │   ECR    │  ← Docker image for the Go server     │
-│  └──────────┘                                        │
-└──────────────────────────────────────────────────────┘
+Browser
+  │
+  ├─── HTTPS /          ──▶ CloudFront ──▶ S3 (React SPA)
+  │
+  ├─── HTTPS /sessions* ──▶ CloudFront ──▶ ECS Fargate :8080 (Go game server)
+  │                                          │  polls ──▶ SQS (vote queue)
+  │                                          │  reads/writes ──▶ DynamoDB
+  │                                          └─ mutations ──▶ AppSync
+  │
+  └─── WSS ─────────────▶ AppSync (GraphQL subscriptions)
+                            └─ broadcasts game state to all clients
 ```
+
+> CloudFront acts as a reverse proxy for the game server — the browser only ever speaks to `https://cloudfront-url`. No direct HTTP to ECS, no mixed-content errors.
 
 ### Game Flow
 
@@ -72,22 +55,15 @@ Group debates and collective decision-making often end in circular arguments tha
 
 ## Cloud Services
 
-### New Services
-
-| # | Service | Provider | Role |
-|---|---------|----------|------|
-| 1 | **AWS ECS Fargate** | AWS | Persistent containerised game server — owns round timer, session state, SQS consumer |
-| 2 | **Amazon SQS** | AWS | Vote queue — decouples vote ingestion from tally logic, handles burst traffic |
-| 3 | **AWS AppSync** | AWS | Managed GraphQL API with WebSocket subscriptions — broadcasts real-time game state |
-| 4 | **Amazon CloudFront** | AWS | CDN — serves React frontend from S3 with low latency |
-
-### Supporting Services
-
 | Service | Role |
 |---------|------|
-| Amazon ECR | Container registry for the Go game server Docker image |
-| Amazon DynamoDB | Stores sessions, crisis scenarios, and vote records |
-| Amazon S3 | Hosts compiled React frontend static assets |
+| **AWS ECS Fargate** | Persistent containerised game server — owns round timer, session state, SQS consumer |
+| **Amazon SQS** | Vote queue — decouples vote ingestion from tally logic |
+| **AWS AppSync** | Managed GraphQL API with WebSocket subscriptions — broadcasts real-time game state |
+| **Amazon CloudFront** | CDN — serves React frontend from S3 with low latency |
+| **Amazon ECR** | Container registry for the Go game server Docker image |
+| **Amazon DynamoDB** | Stores sessions, crisis scenarios, and vote records |
+| **Amazon S3** | Hosts compiled React frontend static assets |
 
 ---
 
@@ -95,7 +71,7 @@ Group debates and collective decision-making often end in circular arguments tha
 
 ```
 uncrisis/
-├── terraform/                  # AWS infrastructure (Terraform)
+├── terraform/                  # AWS infrastructure (OpenTofu)
 │   ├── main.tf                 # Root module: wires everything together
 │   ├── variables.tf
 │   ├── outputs.tf
@@ -118,28 +94,31 @@ uncrisis/
 │   ├── go.mod
 │   └── Dockerfile
 │
-└── frontend/                   # React + Three.js SPA
-    ├── src/
-    │   ├── App.tsx             # Root component + AppSync subscription
-    │   ├── config.ts           # Amplify / server config (env vars)
-    │   ├── graphql.ts          # GraphQL queries / mutations / subscriptions
-    │   ├── store.ts            # Zustand global state
-    │   ├── types.ts            # TypeScript interfaces
-    │   ├── styles.css          # Dark-theme global styles
-    │   ├── components/
-    │   │   ├── Globe.tsx       # Animated Three.js globe
-    │   │   ├── GlobeCanvas.tsx # Full-screen R3F canvas
-    │   │   ├── PlayerList.tsx  # Live player roster
-    │   │   ├── Timer.tsx       # 30-second countdown bar
-    │   │   └── ResultCard.tsx  # Round result + tally bars
-    │   └── pages/
-    │       ├── LobbyPage.tsx   # Create / join room
-    │       ├── WaitingRoomPage.tsx
-    │       ├── VotingPage.tsx  # Crisis card + vote buttons
-    │       ├── ResultPage.tsx  # Round result reveal
-    │       └── FinalPage.tsx   # Peace score ring
-    ├── package.json
-    └── vite.config.ts
+├── frontend/                   # React + Three.js SPA
+│   ├── src/
+│   │   ├── App.tsx             # Root component + AppSync subscription
+│   │   ├── config.ts           # Amplify / server config (env vars)
+│   │   ├── graphql.ts          # GraphQL queries / mutations / subscriptions
+│   │   ├── store.ts            # Zustand global state
+│   │   ├── components/
+│   │   │   ├── Globe.tsx       # Animated Three.js globe
+│   │   │   ├── PlayerList.tsx  # Live player roster
+│   │   │   ├── Timer.tsx       # 30-second countdown bar
+│   │   │   └── ResultCard.tsx  # Round result + tally bars
+│   │   └── pages/
+│   │       ├── LobbyPage.tsx
+│   │       ├── WaitingRoomPage.tsx
+│   │       ├── VotingPage.tsx
+│   │       ├── ResultPage.tsx
+│   │       └── FinalPage.tsx
+│   ├── package.json
+│   └── vite.config.ts
+│
+└── scripts/
+    ├── deploy-backend.sh       # Build → push → ECS redeploy → update CloudFront origin
+    ├── deploy-frontend.sh      # npm build → S3 sync → CloudFront invalidation
+    ├── start-server.sh         # Scale ECS to 1 → wait → update CloudFront origin
+    └── stop-server.sh          # Scale ECS to 0 (stops Fargate charges)
 ```
 
 ---
@@ -150,7 +129,7 @@ uncrisis/
 |------|----------------|
 | Node.js | 18 |
 | Go | 1.22 |
-| Terraform | 1.5 |
+| OpenTofu | 1.6 |
 | AWS CLI | 2 (configured with deploy permissions) |
 | Docker | 24 |
 
@@ -158,62 +137,69 @@ uncrisis/
 
 ## Deployment
 
-### 1 — Provision infrastructure
+### First-time setup (run once)
+
+#### 1 — Provision infrastructure
 
 ```bash
 cd terraform
-terraform init
-terraform apply -var="project_name=uncrisis" -var="environment=prod"
+tofu init
+tofu apply -var="environment=prod"
 ```
 
-Take note of the outputs:
-
-```
-cloudfront_url        = "https://dxxxxxxxxxx.cloudfront.net"
-appsync_graphql_url   = "https://xxxxxxxxxx.appsync-api.ap-southeast-1.amazonaws.com/graphql"
-appsync_api_key       = <sensitive>
-ecr_repository_url    = "123456789.dkr.ecr.ap-southeast-1.amazonaws.com/uncrisis-game-server"
-```
-
-### 2 — Build & push the Go game server
+Note the sensitive API key output:
 
 ```bash
-cd backend
-
-# Authenticate Docker to ECR
-aws ecr get-login-password --region ap-southeast-1 \
-  | docker login --username AWS --password-stdin <ECR_REPO_URL>
-
-docker build -t uncrisis-game-server .
-docker tag uncrisis-game-server:latest <ECR_REPO_URL>:latest
-docker push <ECR_REPO_URL>:latest
+tofu output appsync_api_key
 ```
 
-ECS will automatically pull and restart the task.
+All outputs available after apply:
 
-### 3 — Build & deploy the React frontend
+```
+cloudfront_url              = "https://dxxxxxxxxxx.cloudfront.net"
+cloudfront_distribution_id  = "EXXXXXXXXXXXX"
+appsync_graphql_url         = "https://xxxxxxxxxx.appsync-api.ap-southeast-1.amazonaws.com/graphql"
+appsync_api_key             = <sensitive>
+ecr_repository_url          = "xxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/uncrisis-game-server"
+ecs_cluster_name            = "uncrisis-cluster"
+ecs_service_name            = "uncrisis-game-server"
+s3_bucket_name              = "uncrisis-frontend-prod"
+sqs_vote_queue_url          = "https://sqs.ap-southeast-1.amazonaws.com/..."
+```
+
+#### 2 — Deploy the backend
 
 ```bash
-cd frontend
-
-# Create a .env.local for local dev (never commit this file)
-cat > .env.local <<EOF
-VITE_APPSYNC_ENDPOINT=https://xxxxxxxxxx.appsync-api.ap-southeast-1.amazonaws.com/graphql
-VITE_APPSYNC_API_KEY=<api_key_from_terraform_output>
-VITE_APPSYNC_REGION=ap-southeast-1
-VITE_GAME_SERVER_URL=http://<ecs-task-public-ip>:8080
-EOF
-
-npm install
-npm run build
-
-# Upload to S3 and invalidate CloudFront cache
-BUCKET=$(terraform -chdir=../terraform output -raw s3_bucket_name)
-DIST_ID=$(terraform -chdir=../terraform output -raw cloudfront_distribution_id)
-
-aws s3 sync dist/ s3://$BUCKET/ --delete
-aws cloudfront create-invalidation --distribution-id $DIST_ID --paths "/*"
+./scripts/deploy-backend.sh
 ```
+
+This single command:
+1. Builds the Docker image and pushes to ECR
+2. Forces an ECS service redeployment
+3. Waits for the new task to be running (~60-90s)
+4. Discovers the new task's public IP via AWS CLI
+5. Updates the **CloudFront ECS origin** to the new IP (propagates in ~3-5 min)
+
+The game server is always accessed through CloudFront (`https://cloudfront_url/sessions`), never directly by IP. No `.env.local` changes are needed between deploys.
+
+#### 3 — Deploy the frontend (first time only)
+
+```bash
+./scripts/deploy-frontend.sh
+```
+
+This script creates `frontend/.env.local` automatically from Terraform outputs (AppSync endpoint, API key, and CloudFront URL as `VITE_GAME_SERVER_URL`), then builds and deploys to S3 + CloudFront.
+
+---
+
+### Subsequent deploys
+
+| Change | Command |
+|--------|---------|
+| Backend code changed | `./scripts/deploy-backend.sh` — updates ECS + CloudFront origin |
+| Frontend only changed | `./scripts/deploy-frontend.sh` |
+| Before a game session | `./scripts/start-server.sh` — scales ECS to 1, updates CloudFront origin |
+| After a game session | `./scripts/stop-server.sh` — scales ECS to 0, stops Fargate charges |
 
 ---
 
@@ -224,7 +210,7 @@ aws cloudfront create-invalidation --distribution-id $DIST_ID --paths "/*"
 ```bash
 cd backend
 
-export SQS_QUEUE_URL="http://localhost:4566/000000000000/uncrisis-votes"   # localstack
+export SQS_QUEUE_URL="http://localhost:4566/000000000000/uncrisis-votes"
 export APPSYNC_ENDPOINT="http://localhost:8081/graphql"
 export APPSYNC_API_KEY="local-dev-key"
 export AWS_REGION="ap-southeast-1"
@@ -236,41 +222,38 @@ go run ./cmd/server
 
 ```bash
 cd frontend
-cp .env.example .env.local   # fill in your values
-npm run dev                  # http://localhost:5173
+
+# Create local env pointing at localhost backend
+cat > .env.local <<EOF
+VITE_APPSYNC_ENDPOINT=http://localhost:8081/graphql
+VITE_APPSYNC_API_KEY=local-dev-key
+VITE_APPSYNC_REGION=ap-southeast-1
+VITE_GAME_SERVER_URL=http://localhost:8080
+EOF
+
+npm install
+npm run dev   # http://localhost:5173
 ```
-
----
-
-## Weekly Timeline
-
-| Week | Milestone |
-|------|-----------|
-| 1 | Project setup, repository structure, Terraform skeleton |
-| 2 | DynamoDB + SQS + ECR modules; Go project scaffolding |
-| 3 | Go game manager (session lifecycle, round timer, vote tally) |
-| 4 | AppSync schema, resolvers, real-time subscriptions |
-| 5 | ECS Fargate task definition; Docker build pipeline |
-| 6 | React + Three.js frontend: lobby, voting, result pages |
-| 7 | CloudFront + S3 module; frontend build & deploy scripts |
-| 8 | End-to-end integration testing; load testing SQS burst |
-| 9 | UI polish, peace-score animations, scenario content |
-| 10 | Documentation, final presentation, budget review |
 
 ---
 
 ## Estimated Budget (AWS, monthly)
 
+Assuming **4 active hours/day** (run `start-server.sh` before sessions, `stop-server.sh` after):
+
 | Service | Usage estimate | Cost (USD/mo) |
 |---------|---------------|--------------|
-| ECS Fargate | 1 task × 0.25 vCPU × 0.5 GB, 730 h | ~$9 |
-| DynamoDB | On-demand, low traffic | ~$1 |
-| SQS | <1M requests | <$1 |
-| AppSync | <1M query/mutation/subscription units | ~$4 |
+| ECS Fargate Spot | 0.25 vCPU × 0.5 GB × ~120 h/mo | ~$0.50 |
+| AppSync | <1M query/mutation/subscription units | ~$2 |
+| DynamoDB | On-demand, 50 users | ~$0.50 |
 | CloudFront | 10 GB data transfer | ~$1 |
+| SQS | <1M requests | <$1 |
 | S3 | 1 GB storage | <$1 |
-| ECR | 1 GB storage | <$1 |
-| **Total** | | **~$17 / month** |
+| ECR | <500 MB (3 images) | free tier |
+| CloudWatch | 3-day log retention | <$0.10 |
+| **Total** | | **~$4 / month** |
+
+> If the server runs 24/7 (desired_count always 1), ECS cost rises to ~$3/month. Still well under $10/month total.
 
 ---
 
