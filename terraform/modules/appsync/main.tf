@@ -7,7 +7,8 @@ resource "aws_appsync_graphql_api" "this" {
 
 resource "aws_appsync_api_key" "this" {
   api_id  = aws_appsync_graphql_api.this.id
-  expires = timeadd(timestamp(), "8760h") # 1 year
+  # Expires 1 year from a fixed epoch — update this date on renewal
+  expires = "2027-01-01T00:00:00Z"
 }
 
 # ── IAM role that lets AppSync read/write DynamoDB ──────────────────────────

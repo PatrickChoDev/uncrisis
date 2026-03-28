@@ -51,7 +51,7 @@ export function VotingPage() {
             {scenario.title}
           </h2>
         </div>
-        {isVoting && <Timer secondsLeft={gameState?.timeLeftSecs ?? 30} />}
+        {isVoting && <Timer secondsLeft={gameState?.timeLeftSecs ?? 30} totalSeconds={30} />}
       </div>
 
       {/* Scenario context */}

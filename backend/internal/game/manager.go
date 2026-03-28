@@ -26,10 +26,11 @@ type Manager struct {
 
 // sessionState wraps Session with in-memory vote tracking.
 type sessionState struct {
-	mu        sync.Mutex
-	session   *Session
-	votes     map[string]string // playerId → choice
-	roundTimer *time.Timer
+	mu          sync.Mutex
+	session     *Session
+	votes       map[string]string // playerId → choice
+	timeLeftSecs int
+	roundTimer  *time.Timer
 	cancelRound context.CancelFunc
 }
 
@@ -320,14 +321,8 @@ func (m *Manager) getState(sessionID string) (*sessionState, error) {
 func (m *Manager) broadcastState(ctx context.Context, ss *sessionState) error {
 	ss.mu.Lock()
 	s := ss.session
-	votes := ss.votes
+	timeLeft := ss.timeLeftSecs
 	ss.mu.Unlock()
-
-	timeLeft := 0
-	if s.Phase == PhaseVoting {
-		// Approximate — actual countdown is in the timer goroutine
-		_ = votes
-	}
 
 	var lastResult *RoundResult
 	if len(s.Results) > 0 {
@@ -368,10 +363,14 @@ func (m *Manager) runRoundTimer(ctx context.Context, ss *sessionState) {
 
 			ss.mu.Lock()
 			if ss.session.Phase == PhaseVoting {
-				// The GameState broadcast will pick up the remaining time
-				_ = remaining
+				ss.timeLeftSecs = int(remaining.Seconds())
 			}
 			ss.mu.Unlock()
+
+			// Broadcast updated countdown to subscribers
+			if ss.session.Phase == PhaseVoting {
+				_ = m.broadcastState(ctx, ss)
+			}
 
 			if elapsed >= m.roundDuration {
 				_ = m.TallyRound(ctx, ss.session.SessionID)

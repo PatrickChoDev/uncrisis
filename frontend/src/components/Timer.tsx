@@ -1,8 +1,9 @@
 interface TimerProps {
   secondsLeft: number
+  totalSeconds?: number
 }
 
-export function Timer({ secondsLeft }: TimerProps) {
+export function Timer({ secondsLeft, totalSeconds = 30 }: TimerProps) {
   const isUrgent = secondsLeft <= 10
 
   return (
@@ -43,7 +44,7 @@ export function Timer({ secondsLeft }: TimerProps) {
         <div
           style={{
             height: '100%',
-            width: `${(secondsLeft / 30) * 100}%`,
+            width: `${(secondsLeft / totalSeconds) * 100}%`,
             background: isUrgent ? '#f44336' : '#4caf50',
             transition: 'width 1s linear, background 0.3s',
           }}
